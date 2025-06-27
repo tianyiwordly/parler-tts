@@ -57,6 +57,7 @@ from transformers.utils import (
     is_torchdynamo_compiling,
 )
 from transformers.utils.import_utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10
+from transformers.generation import GenerationMixin
 
 from .configuration_parler_tts import ParlerTTSConfig, ParlerTTSDecoderConfig
 from .dac_wrapper import DACConfig, DACModel
@@ -1693,7 +1694,7 @@ class ParlerTTSDecoder(ParlerTTSPreTrainedModel):
         min_dtype = torch.finfo(dtype).min
         sequence_length = input_tensor.shape[1]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -1821,7 +1822,7 @@ class ParlerTTSModel(ParlerTTSPreTrainedModel):
     "The Parler-TTS decoder model with a language modelling head on top.",
     MUSICGEN_START_DOCSTRING,
 )
-class ParlerTTSForCausalLM(ParlerTTSPreTrainedModel):
+class ParlerTTSForCausalLM(ParlerTTSPreTrainedModel, GenerationMixin):
     def __init__(self, config: ParlerTTSDecoderConfig):
         super().__init__(config)
 
@@ -2168,7 +2169,7 @@ class ParlerTTSForCausalLM(ParlerTTSPreTrainedModel):
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
             self._prepare_attention_mask_for_generation(
-                input_ids, generation_config.pad_token_id, generation_config.eos_token_id
+                input_ids, generation_config, model_kwargs
             )
 
         # 5. Prepare `max_length` depending on other stopping criteria.
@@ -2303,7 +2304,7 @@ class ParlerTTSForCausalLM(ParlerTTSPreTrainedModel):
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
-class ParlerTTSForConditionalGeneration(PreTrainedModel):
+class ParlerTTSForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = ParlerTTSConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
@@ -3423,7 +3424,7 @@ class ParlerTTSForConditionalGeneration(PreTrainedModel):
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
+                inputs_tensor, generation_config, model_kwargs
             )
 
         if "encoder_outputs" not in model_kwargs:
@@ -3652,27 +3653,27 @@ class ParlerTTSForConditionalGeneration(PreTrainedModel):
         else:
             return output_values
 
-    def _get_initial_cache_position(self, input_ids, model_kwargs):
-        """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
-        # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
-        if "inputs_embeds" in model_kwargs:
-            cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
-        else:
-            cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
+    # def _get_initial_cache_position(self, input_ids, model_kwargs):
+    #     """Calculates `cache_position` for the pre-fill stage based on `input_ids` and optionally past length"""
+    #     # `torch.compile`-friendly `torch.arange` from a shape -- the lines below are equivalent to `torch.arange`
+    #     if "inputs_embeds" in model_kwargs:
+    #         cache_position = torch.ones_like(model_kwargs["inputs_embeds"][0, :, 0], dtype=torch.int64).cumsum(0) - 1
+    #     else:
+    #         cache_position = torch.ones_like(input_ids[0, :], dtype=torch.int64).cumsum(0) - 1
 
-        past_length = 0
-        if model_kwargs.get("past_key_values") is not None:
-            cache = model_kwargs["past_key_values"]
-            past_length = 0
-            if not isinstance(cache, Cache):
-                past_length = cache[0][0].shape[2]
-            elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
-                past_length = cache.get_seq_length()
+    #     past_length = 0
+    #     if model_kwargs.get("past_key_values") is not None:
+    #         cache = model_kwargs["past_key_values"]
+    #         past_length = 0
+    #         if not isinstance(cache, Cache):
+    #             past_length = cache[0][0].shape[2]
+    #         elif hasattr(cache, "get_seq_length") and cache.get_seq_length() is not None:
+    #             past_length = cache.get_seq_length()
 
-            # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
-            # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
-            if not is_torchdynamo_compiling():
-                cache_position = cache_position[past_length:]
+    #         # TODO(joao): this is not torch.compile-friendly, find a work-around. If the cache is not empty,
+    #         # end-to-end compilation will yield bad results because `cache_position` will be incorrect.
+    #         if not is_torchdynamo_compiling():
+    #             cache_position = cache_position[past_length:]
 
-        model_kwargs["cache_position"] = cache_position
-        return model_kwargs
+    #     model_kwargs["cache_position"] = cache_position
+    #     return model_kwargs

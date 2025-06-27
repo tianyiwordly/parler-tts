@@ -172,7 +172,7 @@ class ParlerTTSDecoderConfig(PretrainedConfig):
         )
 
 
-class ParlerTTSConfig(PretrainedConfig):
+class ParlerTTSConfig(PretrainedConfig): 
     r"""
     This is the configuration class to store the configuration of a [`ParlerTTSModel`]. It is used to instantiate a
     Parler-TTS model according to the specified arguments, defining the text encoder, audio encoder and Parler-TTS decoder
@@ -235,6 +235,7 @@ class ParlerTTSConfig(PretrainedConfig):
     ```"""
 
     model_type = "parler_tts"
+    has_no_defaults_at_init = True
     is_composition = True
 
     def __init__(self, vocab_size=1024, prompt_cross_attention=False, **kwargs):
