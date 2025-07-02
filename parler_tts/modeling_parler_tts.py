@@ -3272,7 +3272,7 @@ class ParlerTTSForConditionalGeneration(PreTrainedModel):
         need_new_cache = (
             not hasattr(self, "_cache")
             or (not isinstance(cache_to_check, cache_cls))
-            or cache_to_check.max_batch_size != max_batch_size
+            or cache_to_check.batch_size != max_batch_size
             or cache_to_check.max_cache_len < max_cache_len
         )
 
@@ -3289,7 +3289,7 @@ class ParlerTTSForConditionalGeneration(PreTrainedModel):
                 cache_dtype = self.dtype
             cache_kwargs = {
                 "config": self.config.decoder,
-                "max_batch_size": max_batch_size,
+                "batch_size": max_batch_size,
                 "max_cache_len": max_cache_len,
                 "device": self.device,
                 "dtype": cache_dtype,
